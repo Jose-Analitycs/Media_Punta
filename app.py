@@ -18,8 +18,8 @@ st.markdown("Aplicación conectada directamente a los datos de tu repositorio en
 @st.cache_resource
 def cargar_entorno_desde_github():
     # Enlaces directos a los archivos en tu repositorio de GitHub (Modifica los nombres si tus CSV se llaman distinto)
-    url_historico = "https://raw.githubusercontent.com/TU_USUARIO_GITHUB/Media_punta/main/historico_4_temporadas.csv"
-    url_jornada = "https://raw.githubusercontent.com/TU_USUARIO_GITHUB/Media_punta/main/jornada_actual.csv"
+    url_historico = "https://raw.githubusercontent.com/Jose-Analitycs/Media_Punta/main/historico_4_temporadas.csv"
+    url_jornada = "https://raw.githubusercontent.com/Jose-Analitycs/Media_Punta/main/jornada_actual.csv"
     
     try:
         df_hist = pd.read_csv(url_historico)
