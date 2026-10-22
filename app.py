@@ -1,30 +1,61 @@
 import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
+import os
 
 # Configuración de la página web
 st.set_page_config(
-    page_title="Predictor de Fútbol - Media_punta", 
+    page_title="Predictor de Fútbol - Matches.io", 
     page_icon="⚽", 
     layout="wide"
 )
 
 st.title("⚽ Predictor Inteligente de Fútbol")
-st.markdown("Aplicación conectada directamente a los datos de tu repositorio en GitHub.")
+st.markdown("Bienvenido a tu aplicación de Machine Learning para predecir partidos basada en datos históricos.")
 
 # ==========================================
-# CARGAR DATOS DIRECTAMENTE DESDE GITHUB
+# 1. PANEL LATERAL: GESTIÓN DE ARCHIVOS
+# ==========================================
+st.sidebar.header("📁 Gestión de Datos")
+st.sidebar.markdown("Sube tus archivos descargados de `matches.io`:")
+
+# Subir histórico de 4 temporadas (permite seleccionar múltiples archivos CSV)
+archivos_historicos = st.sidebar.file_uploader(
+    "1. Histórico (4 temporadas - CSV)", 
+    type=["csv"], 
+    accept_multiple_files=True
+)
+
+# Subir la jornada actual
+archivo_jornada = st.sidebar.file_uploader(
+    "2. Jornada Actual (CSV)", 
+    type=["csv"]
+)
+
+# Botón para procesar los archivos subidos
+if st.sidebar.button("🔄 Procesar y Actualizar Base de Datos", use_container_width=True):
+    if archivos_historicos:
+        dfs = [pd.read_csv(file) for file in archivos_historicos]
+        df_historico_unificado = pd.concat(dfs, ignore_index=True)
+        df_historico_unificado.to_parquet("historico_4_temporadas.parquet", index=False)
+        st.sidebar.success(f"¡{len(df_historico_unificado):,} partidos históricos guardados!")
+    
+    if archivo_jornada:
+        df_jorn_subida = pd.read_csv(archivo_jornada)
+        df_jorn_subida.to_parquet("jornada_actual.parquet", index=False)
+        st.sidebar.success("¡Jornada actual guardada con éxito!")
+        
+    st.rerun()
+
+# ==========================================
+# 2. CARGAR DATOS Y ENTRENAR EL MODELO
 # ==========================================
 @st.cache_resource
-def cargar_entorno_desde_github():
-    # Enlaces directos a los archivos en tu repositorio de GitHub (Modifica los nombres si tus CSV se llaman distinto)
-    url_historico = "https://raw.githubusercontent.com/Jose-Analitycs/Media_Punta/main/historico_4_temporadas.csv"
-    url_jornada = "https://raw.githubusercontent.com/Jose-Analitycs/Media_Punta/main/jornada_actual.csv"
-    
-    try:
-        df_hist = pd.read_csv(url_historico)
-    except Exception:
-        # Datos de respaldo por si falla la descarga inicial
+def cargar_entorno():
+    # Cargar histórico (si no hay archivos subidos, usa datos de prueba simulados)
+    if os.path.exists("historico_4_temporadas.parquet"):
+        df_hist = pd.read_parquet("historico_4_temporadas.parquet")
+    else:
         df_hist = pd.DataFrame({
             'HomeTeam': ['Real Madrid', 'Barcelona', 'Atlético', 'Sevilla'],
             'AwayTeam': ['Valencia', 'Villarreal', 'Betis', 'Real Sociedad'],
@@ -32,18 +63,19 @@ def cargar_entorno_desde_github():
             'goles_visitante_previos': [1.1, 1.3, 1.0, 1.2],
             'forma_local': [13, 12, 10, 8],
             'forma_visitante': [7, 9, 8, 7],
-            'resultado': [1, 1, 0, 2]
+            'resultado': [1, 1, 0, 2] # 0: Empate, 1: Local, 2: Visitante
         })
     
-    # Entrenar el modelo de Machine Learning
+    # Entrenar modelo de Machine Learning (Random Forest)
     X = df_hist[['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante']]
     y = df_hist['resultado']
     modelo = RandomForestClassifier(n_estimators=100, random_state=42)
     modelo.fit(X, y)
     
-    try:
-        df_jorn = pd.read_csv(url_jornada)
-    except Exception:
+    # Cargar jornada actual
+    if os.path.exists("jornada_actual.parquet"):
+        df_jorn = pd.read_parquet("jornada_actual.parquet")
+    else:
         df_jorn = pd.DataFrame({
             'Jornada': [28, 28, 28, 28],
             'HomeTeam': ['Real Madrid', 'Barcelona', 'Atlético', 'Sevilla'],
@@ -56,10 +88,10 @@ def cargar_entorno_desde_github():
         
     return df_hist, modelo, df_jorn
 
-df_historico, modelo_ml, df_jornada = cargar_entorno_desde_github()
+df_historico, modelo_ml, df_jornada = cargar_entorno()
 
 # ==========================================
-# INTERFAZ PRINCIPAL DE LA APLICACIÓN
+# 3. INTERFAZ PRINCIPAL DE LA APLICACIÓN
 # ==========================================
 menu = st.radio(
     "Selecciona una sección:", 
@@ -81,6 +113,7 @@ if menu == "📅 Pronosticar Jornada Actual":
         local = row['HomeTeam']
         visitante = row['AwayTeam']
         
+        # Predecir partido en tiempo real
         datos_partido = pd.DataFrame([[
             row['goles_local_previos'], 
             row['goles_visitante_previos'], 
@@ -101,6 +134,7 @@ if menu == "📅 Pronosticar Jornada Actual":
 
 elif menu == "🔍 Simulador Individual (H2H)":
     st.header("⚙️ Simulación Cara a Cara")
+    st.write("Ajusta los parámetros manualmente para simular cualquier encuentro.")
     
     col1, col2 = st.columns(2)
     with col1:
