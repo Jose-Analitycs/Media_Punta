@@ -2,36 +2,47 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 
-# Configuración inicial de la página
 st.set_page_config(page_title="Media_punta - Predictor de Fútbol", page_icon="⚽", layout="wide")
 
 st.title("⚽ Media_punta: Predictor de Fútbol")
 
 @st.cache_resource
 def cargar_datos_maestros():
-    # Lee directamente los dos archivos maestros que subiste a la raíz de GitHub
-    df_hist = pd.read_csv("historico_maestro.csv")
-    df_jorn = pd.read_csv("jornada_maestra.csv")
-    
-    # Entrenar el modelo de Machine Learning con el histórico unificado
-    X = df_hist[['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante']]
-    y = df_hist['resultado']
-    modelo = RandomForestClassifier(n_estimators=100, random_state=42)
-    modelo.fit(X, y)
-    
-    return df_hist, modelo, df_jorn
+    try:
+        # Intentamos leer los archivos de la raíz
+        df_hist = pd.read_csv("historico_maestro.csv")
+        df_jorn = pd.read_csv("jornada_maestra.csv")
+        
+        # Mostramos un aviso de éxito temporal para confirmar que los leyó
+        st.success(f"✅ ¡Archivos leídos con éxito! Histórico: {len(df_hist)} filas | Jornada: {len(df_jorn)} filas")
+        
+        # Entrenar el modelo de Machine Learning
+        X = df_hist[['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante']]
+        y = df_hist['resultado']
+        modelo = RandomForestClassifier(n_estimators=100, random_state=42)
+        modelo.fit(X, y)
+        
+        return df_hist, modelo, df_jorn
+        
+    except Exception as e:
+        st.error(f"❌ Error crítico al leer los CSVs: {e}")
+        return None, None, None
 
-# Cargamos el entorno y los modelos
+# Cargamos los datos
 df_historico, modelo_ml, df_jornada = cargar_datos_maestros()
 
-# Menú de navegación de la app
+# Si ha habido un error al cargar, detenemos la app para que no pete
+if df_historico is None or modelo_ml is None or df_jornada is None:
+    st.warning("⚠️ Comprueba que los archivos `historico_maestro.csv` y `jornada_maestra.csv` están exactamente en la raíz principal de tu GitHub y que las columnas coinciden.")
+    st.stop()
+
+# Menú de navegación
 menu = st.radio("Selecciona una sección:", ["📅 Pronosticar Jornada Actual", "🔍 Simulador Cara a Cara", "📊 Ver Base de Datos"], horizontal=True)
 st.markdown("---")
 
 if menu == "📅 Pronosticar Jornada Actual":
     st.header("🎯 Predicciones para la Jornada")
     
-    # Si tus CSVs tienen una columna de liga o jornada, puedes filtrar aquí fácilmente
     if 'Jornada' in df_jornada.columns:
         jornada_elegida = st.selectbox("Elige el número de Jornada", sorted(df_jornada['Jornada'].unique()))
         partidos_activos = df_jornada[df_jornada['Jornada'] == jornada_elegida]
