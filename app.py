@@ -12,11 +12,9 @@ def cargar_y_entrenar_modelo():
         df_hist = pd.read_csv("historico_maestro.csv")
         df_jorn = pd.read_csv("jornada_maestra.csv")
         
-        # Limpieza de columnas sobrantes
         df_hist = df_hist.loc[:, ~df_hist.columns.str.contains('^Unnamed')]
         df_jorn = df_jorn.loc[:, ~df_jorn.columns.str.contains('^Unnamed')]
         
-        # Aseguramos columnas base para entrenar si faltan
         if 'goles_local_previos' not in df_hist.columns:
             df_hist['goles_local_previos'] = 1.5
         if 'goles_visitante_previos' not in df_hist.columns:
@@ -40,7 +38,6 @@ def cargar_y_entrenar_modelo():
         X = df_hist[features].fillna(0)
         y = df_hist['resultado'].fillna(0)
         
-        # Entrenamos el modelo con los 20.000+ partidos históricos
         modelo = RandomForestClassifier(n_estimators=100, random_state=42)
         modelo.fit(X, y)
         
@@ -56,29 +53,19 @@ if not exito:
     st.warning("⚠️ Hubo un problema cargando los datos en la app.")
     st.stop()
 
-# Función para calcular estadísticas reales del histórico para un equipo
 def obtener_estadisticas_equipo(df_hist, nombre_equipo):
     try:
-        # Buscamos partidos donde haya jugado como local o visitante
-        locales = df_hist[df_hist['home_team'].str.contains(nombre_equipo, case=False, na=False)] if 'home_team' in df_hist.columns else pd.DataFrame()
-        visitantes = df_hist[df_hist['away_team'].str.contains(nombre_equipo, case=False, na=False)] if 'away_team' in df_hist.columns else pd.DataFrame()
-        
-        # Si encontramos partidos históricos, calculamos medias reales
-        goles_medios = 1.4 # Valor por defecto seguro
+        goles_medios = 1.4
         forma_media = 7.0
-        
-        if not locales.empty or not visitantes.empty:
-            # Media de goles anotados si tenemos las columnas
+        if not df_hist.empty:
             if 'goles_local_previos' in df_hist.columns:
                 goles_medios = float(df_hist['goles_local_previos'].mean())
             if 'forma_local' in df_hist.columns:
                 forma_media = float(df_hist['forma_local'].mean())
-                
         return goles_medios, forma_media
     except:
         return 1.4, 7.0
 
-# Menú principal de navegación
 menu = st.radio("Selecciona una sección:", ["📅 Pronosticar Jornada Actual", "🔍 Simulador Cara a Cara", "📊 Ver Base de Datos"], horizontal=True)
 st.markdown("---")
 
@@ -86,23 +73,33 @@ if menu == "📅 Pronosticar Jornada Actual":
     st.header("🎯 Predicciones Inteligentes para la Jornada")
     
     if df_jornada is not None and not df_jornada.empty:
+        # Buscamos de forma más amplia cualquier columna que pueda representar la Liga o Competición
         col_liga = None
-        for posible in ['league', 'League', 'competition', 'Competition', 'Pais', 'Div']:
+        posibles_nombres = ['league', 'League', 'competition', 'Competition', 'Pais', 'Div', 'division', 'Division', 'tournament', 'competicion', 'liga']
+        for posible in posibles_nombres:
             if posible in df_jornada.columns:
                 col_liga = posible
                 break
         
+        # Si aún no la encuentra, buscamos la primera columna que tenga texto (tipo object/string)
+        if not col_liga:
+            for col in df_jornada.columns:
+                if df_jornada[col].dtype == 'object' and col not in ['home_team', 'away_team', 'HomeTeam', 'AwayTeam', 'date', 'time', 'status', 'city', 'stadium']:
+                    col_liga = col
+                    break
+
         col_jornada = 'matchday' if 'matchday' in df_jornada.columns else (df_jornada.columns[2] if len(df_jornada.columns) > 2 else None)
         
         col1, col2 = st.columns(2)
         
         with col1:
             if col_liga:
-                ligas_disponibles = sorted(df_jornada[col_liga].dropna().unique())
-                liga_elegida = st.selectbox("🏆 Selecciona la Liga / Competición", ligas_disponibles)
-                df_filtrado_liga = df_jornada[df_jornada[col_liga] == liga_elegida]
+                ligas_disponibles = sorted(df_jornada[col_liga].dropna().astype(str).unique())
+                liga_elegida = st.selectbox(f"🏆 Selecciona la Liga (Columna: {col_liga})", ligas_disponibles)
+                df_filtrado_liga = df_jornada[df_jornada[col_liga].astype(str) == liga_elegida]
             else:
                 df_filtrado_liga = df_jornada
+                st.info("ℹ️ No se detectó columna de liga específica. Mostrando todos los partidos.")
         
         with col2:
             if col_jornada and col_jornada in df_filtrado_liga.columns:
@@ -119,9 +116,8 @@ if menu == "📅 Pronosticar Jornada Actual":
             local = row.get('home_team', row.get('HomeTeam', 'Local'))
             visitante = row.get('away_team', row.get('AwayTeam', 'Visitante'))
             
-            # 🧠 Calculamos los valores reales basados en el histórico de los equipos
-            g_loc, f_loc = obtener_estadisticas_equipo(df_historico, local)
-            g_vis, f_vis = obtener_estadisticas_equipo(df_historico, visitante)
+            g_loc, f_loc = obtener_estadisticas_equipo(df_historico, str(local))
+            g_vis, f_vis = obtener_estadisticas_equipo(df_historico, str(visitante))
             
             datos_partido = pd.DataFrame([[g_loc, g_vis, f_loc, f_vis]], columns=['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante'])
             
