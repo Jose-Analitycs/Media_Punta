@@ -9,15 +9,12 @@ st.title("⚽ Media_punta: Predictor de Fútbol")
 @st.cache_resource
 def cargar_y_entrenar_modelo():
     try:
-        # Cargamos los CSVs maestros
         df_hist = pd.read_csv("historico_maestro.csv")
         df_jorn = pd.read_csv("jornada_maestra.csv")
         
-        # Limpieza básica
         df_hist = df_hist.loc[:, ~df_hist.columns.str.contains('^Unnamed')]
         df_jorn = df_jorn.loc[:, ~df_jorn.columns.str.contains('^Unnamed')]
         
-        # Aseguramos columnas numéricas para el modelo
         for col in ['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante']:
             if col not in df_hist.columns:
                 df_hist[col] = 1.5 if 'goles' in col else 7.0
@@ -32,8 +29,7 @@ def cargar_y_entrenar_modelo():
         X = df_hist[features].fillna(0)
         y = df_hist['resultado'].fillna(0)
         
-        # Entrenamiento rápido del modelo
-        modelo = RandomForestClassifier(n_estimators=50, random_state=42)
+        modelo = RandomForestClassifier(n_estimators=30, random_state=42)
         modelo.fit(X, y)
         
         return df_hist, modelo, df_jorn, True
@@ -42,7 +38,6 @@ def cargar_y_entrenar_modelo():
         st.error(f"❌ Error al procesar los datos: {e}")
         return None, None, None, False
 
-# Cargamos todo en caché para que no vuelva a cargar nunca más
 df_historico, modelo_ml, df_jornada, exito = cargar_y_entrenar_modelo()
 
 if not exito:
@@ -56,25 +51,36 @@ if menu == "📅 Pronosticar Jornada Actual":
     st.header("🎯 Predicciones para la Jornada")
     
     if df_jornada is not None and not df_jornada.empty:
-        # Buscamos columnas de Liga y Jornada de forma rápida
-        col_jornada = 'matchday' if 'matchday' in df_jornada.columns else (df_jornada.columns[2] if len(df_jornada.columns) > 2 else None)
+        # 🔍 Añadimos un buscador de equipo para filtrar al instante sin bloquear la pantalla
+        busqueda = st.text_input("🔍 Buscar equipo (ej: Real Madrid, Barcelona...)", "").strip()
         
-        if col_jornada and col_jornada in df_jornada.columns:
-            jornadas_disponibles = sorted(df_jornada[col_jornada].dropna().unique())
-            jornada_elegida = st.selectbox("📅 Selecciona la Jornada / Fecha", jornadas_disponibles)
-            partidos_activos = df_jornada[df_jornada[col_jornada] == jornada_elegida]
+        if busqueda:
+            # Filtramos rápidamente por equipo local o visitante
+            col_local = 'home_team' if 'home_team' in df_jornada.columns else 'HomeTeam'
+            col_vis = 'away_team' if 'away_team' in df_jornada.columns else 'AwayTeam'
+            
+            mask = df_jornada[col_local].astype(str).str.contains(busqueda, case=False, na=False) | \
+                   df_jornada[col_vis].astype(str).str.contains(busqueda, case=False, na=False)
+            partidos_activos = df_jornada[mask]
         else:
-            partidos_activos = df_jornada
+            col_jornada = 'matchday' if 'matchday' in df_jornada.columns else (df_jornada.columns[2] if len(df_jornada.columns) > 2 else None)
+            if col_jornada and col_jornada in df_jornada.columns:
+                jornadas_disponibles = sorted(df_jornada[col_jornada].dropna().unique())
+                jornada_elegida = st.selectbox("📅 Selecciona la Jornada / Fecha", jornadas_disponibles)
+                partidos_activos = df_jornada[df_jornada[col_jornada] == jornada_elegida]
+            else:
+                partidos_activos = df_jornada
+
+        # Limitamos la visualización a un máximo de 40 partidos por pantalla para que no se congele nunca
+        total_partidos = len(partidos_activos)
+        st.info(f"Mostrando partidos (Total encontrados: {total_partidos}). *Usa el buscador superior si buscas un partido concreto.*")
         
-        st.markdown(f"**Partidos en esta selección:** {len(partidos_activos)}")
-        st.markdown("---")
+        partidos_activos = partidos_activos.head(40)
         
-        # Mostramos los partidos de forma ligera y directa
         for idx, row in partidos_activos.iterrows():
             local = row.get('home_team', row.get('HomeTeam', 'Local'))
             visitante = row.get('away_team', row.get('AwayTeam', 'Visitante'))
             
-            # Datos estándar rápidos para la predicción
             datos_partido = pd.DataFrame([[1.5, 1.1, 7, 6]], columns=['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante'])
             
             pred = modelo_ml.predict(datos_partido)[0]
