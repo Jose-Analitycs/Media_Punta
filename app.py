@@ -50,6 +50,7 @@ if not exito:
     st.warning("⚠️ Hubo un problema cargando los datos en la app.")
     st.stop()
 
+# Menú principal de navegación
 menu = st.radio("Selecciona una sección:", ["📅 Pronosticar Jornada Actual", "🔍 Simulador Cara a Cara", "📊 Ver Base de Datos"], horizontal=True)
 st.markdown("---")
 
@@ -57,31 +58,39 @@ if menu == "📅 Pronosticar Jornada Actual":
     st.header("🎯 Predicciones para la Jornada")
     
     if df_jornada is not None and not df_jornada.empty:
-        # Buscamos si hay columna de Liga o Competición para separar los partidos correctamente
+        # Detectar columna de Liga
         col_liga = None
         for posible in ['league', 'League', 'competition', 'Competition', 'Pais', 'Div']:
             if posible in df_jornada.columns:
                 col_liga = posible
                 break
         
-        if col_liga:
-            liga_elegida = st.selectbox("Selecciona la Liga / Competición", sorted(df_jornada[col_liga].dropna().unique()))
-            df_filtrado_liga = df_jornada[df_jornada[col_liga] == liga_elegida]
-        else:
-            df_filtrado_liga = df_jornada
-            
-        # Filtro de Jornada/Fecha dentro de la liga seleccionada
+        # Detectar columna de Jornada
         col_jornada = 'matchday' if 'matchday' in df_jornada.columns else (df_jornada.columns[2] if len(df_jornada.columns) > 2 else None)
         
-        if col_jornada and col_jornada in df_filtrado_liga.columns:
-            jornadas_disponibles = sorted(df_filtrado_liga[col_jornada].dropna().unique())
-            jornada_elegida = st.selectbox("Selecciona la Jornada o Fecha", jornadas_disponibles)
-            partidos_activos = df_filtrado_liga[df_filtrado_liga[col_jornada] == jornada_elegida]
-        else:
-            partidos_activos = df_filtrado_liga
+        # 🎛️ CONTROLES SUPERIORES EN COLUMNAS (Filtros de Liga y Jornada)
+        col1, col2 = st.columns(2)
         
-        st.write(f"Mostrando **{len(partidos_activos)}** partidos:")
+        with col1:
+            if col_liga:
+                ligas_disponibles = sorted(df_jornada[col_liga].dropna().unique())
+                liga_elegida = st.selectbox("🏆 Selecciona la Liga / Competición", ligas_disponibles)
+                df_filtrado_liga = df_jornada[df_jornada[col_liga] == liga_elegida]
+            else:
+                df_filtrado_liga = df_jornada
         
+        with col2:
+            if col_jornada and col_jornada in df_filtrado_liga.columns:
+                jornadas_disponibles = sorted(df_filtrado_liga[col_jornada].dropna().unique())
+                jornada_elegida = st.selectbox("📅 Selecciona la Jornada / Fecha", jornadas_disponibles)
+                partidos_activos = df_filtrado_liga[df_filtrado_liga[col_jornada] == jornada_elegida]
+            else:
+                partidos_activos = df_filtrado_liga
+        
+        st.markdown("---")
+        st.subheader(f"Partidos encontrados: {len(partidos_activos)}")
+        
+        # Listado de partidos filtrados
         for idx, row in partidos_activos.iterrows():
             local = row.get('home_team', row.get('HomeTeam', 'Local'))
             visitante = row.get('away_team', row.get('AwayTeam', 'Visitante'))
