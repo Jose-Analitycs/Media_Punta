@@ -37,42 +37,25 @@ menu = st.radio("Sección:", ["📅 Pronosticar Jornada", "📊 Ver Base de Dato
 st.markdown("---")
 
 if menu == "📅 Pronosticar Jornada":
-    st.header("🎯 Predicciones por Competición y Jornada")
+    st.header("🎯 Predicciones por Jornada")
     
-    if not df_jorn.empty:
-        # Usamos las columnas reales de tu estructura: 'city'/'stadium' como grupo o 'matchday' como jornada
-        # Si tienes una columna de liga/competición (ej: 'league' o 'division'), la detectamos. Si no, usamos 'city' o 'stadium' temporalmente.
-        col_liga = None
-        for posible in ['league', 'League', 'competition', 'Competition', 'division', 'Division', 'city']:
-            if posible in df_jorn.columns:
-                col_liga = posible
-                break
+    if not df_jorn.empty and 'matchday' in df_jorn.columns:
+        # Aseguramos que matchday sea numérico o texto ordenado limpio
+        df_jorn['matchday'] = pd.to_numeric(df_jorn['matchday'], errors='coerce')
         
-        col_jornada = 'matchday' if 'matchday' in df_jorn.columns else df_jorn.columns[2]
-
-        # 🎛️ Selectores en columnas (Liga/Ciudad y Jornada)
-        col1, col2 = st.columns(2)
+        # 🎛️ Selector único y limpio de Jornada
+        jornadas_disponibles = sorted([int(x) for x in df_jorn['matchday'].dropna().unique()])
         
-        with col1:
-            if col_liga and col_liga in df_jorn.columns:
-                ligas_disponibles = sorted(df_jorn[col_liga].dropna().astype(str).unique())
-                liga_elegida = st.selectbox("🏆 Selecciona la Competición / Sede", ligas_disponibles)
-                df_filtrado = df_jorn[df_jorn[col_liga].astype(str) == liga_elegida]
-            else:
-                df_filtrado = df_jorn
-
-        with col2:
-            if col_jornada and col_jornada in df_filtrado.columns:
-                jornadas_disponibles = sorted(df_filtrado[col_jornada].dropna().unique())
-                jornada_elegida = st.selectbox("📅 Selecciona el Número de Jornada", jornadas_disponibles)
-                partidos_activos = df_filtrado[df_filtrado[col_jornada] == jornada_elegida]
-            else:
-                partidos_activos = df_filtrado
+        if jornadas_disponibles:
+            jornada_elegida = st.selectbox("📅 Selecciona el Número de Jornada", jornadas_disponibles)
+            partidos_activos = df_jorn[df_jorn['matchday'] == jornada_elegida]
+        else:
+            partidos_activos = df_jorn
         
         st.markdown("---")
-        st.markdown(f"**Partidos en esta selección:** {len(partidos_activos)}")
+        st.markdown(f"**Partidos en la Jornada {jornada_elegida if 'jornada_elegida' in locals() else ''}:** {len(partidos_activos)}")
         
-        # Listado limpio de los partidos
+        # Listado limpio de los partidos de esa jornada
         for idx, row in partidos_activos.iterrows():
             local = row.get('home_team', 'Local')
             visitante = row.get('away_team', 'Visitante')
@@ -90,7 +73,7 @@ if menu == "📅 Pronosticar Jornada":
                 c2.metric("Empate", f"{probs[0]*100:.1f}%" if len(probs) > 0 else "33.3%")
                 c3.metric(f"Visitante ({visitante})", f"{probs[2]*100:.1f}%" if len(probs) > 2 else "33.3%")
     else:
-        st.info("El archivo de jornada está vacío.")
+        st.info("El archivo de jornada no contiene la columna 'matchday' o está vacío.")
 
 else:
     st.header("📊 Resumen del Histórico Maestro")
