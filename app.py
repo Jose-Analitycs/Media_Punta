@@ -9,35 +9,25 @@ st.title("⚽ Media_punta: Predictor de Fútbol")
 @st.cache_resource
 def cargar_y_preparar_datos():
     try:
-        # 1. Cargamos los archivos maestros de la raíz de GitHub
         df_hist = pd.read_csv("historico_maestro.csv")
         df_jorn = pd.read_csv("jornada_maestra.csv")
         
-        # Limpieza rápida por si hay columnas de índice sobrantes (ej: 'Unnamed: 0')
         df_hist = df_hist.loc[:, ~df_hist.columns.str.contains('^Unnamed')]
         df_jorn = df_jorn.loc[:, ~df_jorn.columns.str.contains('^Unnamed')]
         
-        # 2. Verificamos y adaptamos el histórico para el Machine Learning
-        # Si no existen las columnas exactas de goles/forma, creamos variables numéricas seguras basadas en datos disponibles
         if 'goles_local_previos' not in df_hist.columns:
-            # Creamos columnas simuladas inteligentes o buscamos alternativas si existen en tus 164 columnas
             df_hist['goles_local_previos'] = 1.5
             df_hist['goles_visitante_previos'] = 1.1
             df_hist['forma_local'] = 7
             df_hist['forma_visitante'] = 6
             
         if 'resultado' not in df_hist.columns:
-            # Si se llama 'result' o similar, lo renombramos
             if 'result' in df_hist.columns:
                 df_hist['resultado'] = df_hist['result'].apply(lambda x: 1 if x == 'H' else (2 if x == 'A' else 0))
             else:
-                # Columna inventada de fallback para que el modelo no falle al entrenar
                 df_hist['resultado'] = 1 
 
-        # Features para entrenar el Random Forest
         features = ['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante']
-        
-        # Nos aseguramos de que existan en el dataframe
         for f in features:
             if f not in df_hist.columns:
                 df_hist[f] = 0.0
@@ -54,14 +44,12 @@ def cargar_y_preparar_datos():
         st.error(f"❌ Error al procesar los datos: {e}")
         return None, None, None, False
 
-# Cargamos el entorno
 df_historico, modelo_ml, df_jornada, exito = cargar_y_preparar_datos()
 
 if not exito:
     st.warning("⚠️ Hubo un problema cargando los datos en la app.")
     st.stop()
 
-# Menú de navegación
 menu = st.radio("Selecciona una sección:", ["📅 Pronosticar Jornada Actual", "🔍 Simulador Cara a Cara", "📊 Ver Base de Datos"], horizontal=True)
 st.markdown("---")
 
@@ -69,17 +57,35 @@ if menu == "📅 Pronosticar Jornada Actual":
     st.header("🎯 Predicciones para la Jornada")
     
     if df_jornada is not None and not df_jornada.empty:
-        # Usamos las columnas detectadas en tu jornada ('matchday', 'home_team', 'away_team')
-        col_jornada = 'matchday' if 'matchday' in df_jornada.columns else df_jornada.columns[2]
+        # Buscamos si hay columna de Liga o Competición para separar los partidos correctamente
+        col_liga = None
+        for posible in ['league', 'League', 'competition', 'Competition', 'Pais', 'Div']:
+            if posible in df_jornada.columns:
+                col_liga = posible
+                break
         
-        jornada_elegida = st.selectbox("Elige la Jornada / Fecha", sorted(df_jornada[col_jornada].dropna().unique()))
-        partidos_activos = df_jornada[df_jornada[col_jornada] == jornada_elegida]
+        if col_liga:
+            liga_elegida = st.selectbox("Selecciona la Liga / Competición", sorted(df_jornada[col_liga].dropna().unique()))
+            df_filtrado_liga = df_jornada[df_jornada[col_liga] == liga_elegida]
+        else:
+            df_filtrado_liga = df_jornada
+            
+        # Filtro de Jornada/Fecha dentro de la liga seleccionada
+        col_jornada = 'matchday' if 'matchday' in df_jornada.columns else (df_jornada.columns[2] if len(df_jornada.columns) > 2 else None)
+        
+        if col_jornada and col_jornada in df_filtrado_liga.columns:
+            jornadas_disponibles = sorted(df_filtrado_liga[col_jornada].dropna().unique())
+            jornada_elegida = st.selectbox("Selecciona la Jornada o Fecha", jornadas_disponibles)
+            partidos_activos = df_filtrado_liga[df_filtrado_liga[col_jornada] == jornada_elegida]
+        else:
+            partidos_activos = df_filtrado_liga
+        
+        st.write(f"Mostrando **{len(partidos_activos)}** partidos:")
         
         for idx, row in partidos_activos.iterrows():
             local = row.get('home_team', row.get('HomeTeam', 'Local'))
             visitante = row.get('away_team', row.get('AwayTeam', 'Visitante'))
             
-            # Datos de entrada para la predicción
             datos_partido = pd.DataFrame([[1.5, 1.1, 7, 6]], columns=['goles_local_previos', 'goles_visitante_previos', 'forma_local', 'forma_visitante'])
             
             pred = modelo_ml.predict(datos_partido)[0]
@@ -93,7 +99,7 @@ if menu == "📅 Pronosticar Jornada Actual":
                 c2.metric("Empate", f"{probs[0]*100:.1f}%" if len(probs) > 0 else "33.3%")
                 c3.metric(f"Visitante ({visitante})", f"{probs[2]*100:.1f}%" if len(probs) > 2 else "33.3%")
     else:
-        st.info("ℹ️ El archivo de jornada no contiene partidos para mostrar o está vacío. Sube un `jornada_maestra.csv` con partidos programados.")
+        st.info("ℹ️ El archivo de jornada no contiene partidos.")
 
 elif menu == "🔍 Simulador Cara a Cara":
     st.header("⚙️ Simulador Individual (H2H)")
